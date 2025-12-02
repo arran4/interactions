@@ -9,6 +9,7 @@ import (
 	"log"
 	"math"
 	"os"
+	"strings"
 
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/basicfont"
@@ -262,14 +263,21 @@ func drawScenario(img *image.RGBA, rect image.Rectangle, s Scenario) {
 	drawRectBorder(img, rect, border)
 
 	// Title & subtitle
-	drawLabel(img, s.Title, rect.Min.X+10, rect.Min.Y+22, color.RGBA{20, 20, 20, 255})
-	drawLabel(img, s.Subtitle, rect.Min.X+10, rect.Min.Y+40, color.RGBA{80, 80, 80, 255})
+	textX := rect.Min.X + 10
+	maxTextWidth := rect.Dx() - 20
+	titleHeight := drawWrappedLabel(img, s.Title, textX, rect.Min.Y+22, maxTextWidth, color.RGBA{20, 20, 20, 255})
+	subtitleY := rect.Min.Y + 22 + titleHeight + 6
+	subtitleHeight := drawWrappedLabel(img, s.Subtitle, textX, subtitleY, maxTextWidth, color.RGBA{80, 80, 80, 255})
+	extraTextHeight := (titleHeight - lineHeight) + (subtitleHeight - lineHeight)
+	if extraTextHeight < 0 {
+		extraTextHeight = 0
+	}
 
 	// Chronological layout
 	left := rect.Min.X + 40
 	right := rect.Max.X - 40
-	topY := rect.Min.Y + 90  // more recent
-	botY := rect.Min.Y + 170 // later
+	topY := rect.Min.Y + 90 + extraTextHeight  // more recent
+	botY := rect.Min.Y + 170 + extraTextHeight // later
 
 	var topNodes, bottomNodes []string
 	for _, name := range s.Nodes {
@@ -357,6 +365,43 @@ func drawLabel(img *image.RGBA, text string, x, y int, col color.Color) {
 		Dot:  fixed.P(x, y),
 	}
 	d.DrawString(text)
+}
+
+const (
+	approxCharWidth = 7
+	lineHeight      = 14
+)
+
+// drawWrappedLabel renders text within a maximum width, wrapping at word
+// boundaries. It returns the total height used so callers can adjust layouts.
+func drawWrappedLabel(img *image.RGBA, text string, x, y, maxWidth int, col color.Color) int {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return 0
+	}
+
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return 0
+	}
+
+	var lines []string
+	line := words[0]
+	for _, w := range words[1:] {
+		if (len(line)+1+len(w))*approxCharWidth <= maxWidth {
+			line += " " + w
+			continue
+		}
+		lines = append(lines, line)
+		line = w
+	}
+	lines = append(lines, line)
+
+	for i, l := range lines {
+		drawLabel(img, l, x, y+i*lineHeight, col)
+	}
+
+	return len(lines) * lineHeight
 }
 
 func drawCenteredLabel(img *image.RGBA, text string, centerX, y int, col color.Color) {
