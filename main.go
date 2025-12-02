@@ -4,6 +4,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"image"
 	"image/color"
@@ -32,8 +33,78 @@ type Scenario struct {
 }
 
 func main() {
+	if err := run(os.Args[1:]); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run(args []string) error {
+	if len(args) == 0 {
+		printGlobalUsage()
+		return nil
+	}
+
+	switch args[0] {
+	case "render":
+		return runRender(args[1:])
+	case "list":
+		return runList(args[1:])
+	case "help", "--help", "-h":
+		printGlobalUsage()
+		return nil
+	default:
+		printGlobalUsage()
+		return fmt.Errorf("unknown subcommand %q", args[0])
+	}
+}
+
+func runRender(args []string) error {
+	fs := flag.NewFlagSet("render", flag.ContinueOnError)
+	output := fs.String("output", "interactions.png", "path to write the generated PNG")
+	columns := fs.Int("columns", 8, "number of columns in the grid (use 3 for README-friendly long form)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	if *columns < 1 {
+		return fmt.Errorf("columns must be at least 1")
+	}
+
 	scenarios := generateScenarios()
-	renderAllScenarios("interactions.png", scenarios)
+	renderAllScenarios(*output, scenarios, *columns)
+	return nil
+}
+
+func runList(args []string) error {
+	fs := flag.NewFlagSet("list", flag.ContinueOnError)
+	longForm := fs.Bool("long", false, "print subtitles along with scenario titles")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	scenarios := generateScenarios()
+	for i, s := range scenarios {
+		if *longForm {
+			fmt.Printf("%02d. %s — %s\n", i+1, s.Title, s.Subtitle)
+			continue
+		}
+		fmt.Printf("%02d. %s\n", i+1, s.Title)
+	}
+	return nil
+}
+
+func printGlobalUsage() {
+	fmt.Println("Usage: interactions <command> [options]")
+	fmt.Println()
+	fmt.Println("Commands:")
+	fmt.Println("  render   Generate the interactions grid PNG (use --output to set the destination)")
+	fmt.Println("  list     List scenario titles (use --long to include subtitles)")
+	fmt.Println("  help     Show this help text")
+	fmt.Println()
+	fmt.Println("Examples:")
+	fmt.Println("  go run main.go render --output interactions.png")
+	fmt.Println("  go run main.go render --columns 3 --output interactions-long.png")
+	fmt.Println("  go run main.go list --long")
 }
 
 // ----------------------------------------------------------------------
@@ -162,16 +233,16 @@ func externalSentenceFragment(role string, p int) string {
 // Rendering
 // ----------------------------------------------------------------------
 
-func renderAllScenarios(filename string, scenarios []Scenario) {
+func renderAllScenarios(filename string, scenarios []Scenario, columns int) {
 	const (
 		panelW       = 360
 		panelH       = 220
-		cols         = 8 // 8 x 8 grid for 64 scenarios
 		margin       = 20
 		titleHeight  = 50
 		legendHeight = 120
 	)
 
+	cols := columns
 	rows := (len(scenarios) + cols - 1) / cols
 
 	imgW := cols*panelW + (cols+1)*margin

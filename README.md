@@ -19,7 +19,36 @@ The generated image, `interactions.png`, shows a grid of 64 scenarios based on a
 
 While the model is simple, it exhaustively maps every combination of these relationships to reveal the combinatorial explosion of complexity.
 
-![Interaction Patterns](interactions.png)
+![Interaction Patterns (long form)](interactions-long.png)
+
+The long-form view above uses three columns so it remains readable within the GitHub README. The default eight-column grid is still rendered to `interactions.png` for full-width contexts.
+
+## Command-line usage
+
+The generator now offers subcommands so you can choose how you want to work with the scenarios. Run `go run main.go help` for a concise overview, or use the following cheatsheet:
+
+* `render` — Create the visualization PNG. Use `--output` to set a custom destination (defaults to `interactions.png`). Add `--columns 3` when you need a long-form layout that reads well in narrow views like the GitHub README.
+* `list` — Print the scenario titles to the console. Add `--long` to include subtitles for a quick narrative reference.
+
+### Long-form examples
+
+Render the grid to a specific location:
+
+```
+go run main.go render --output build/interaction-grid.png
+```
+
+Create a long-form version that fits narrower documentation columns (3 panels wide):
+
+```
+go run main.go render --columns 3 --output build/interaction-grid-long.png
+```
+
+Browse the scenarios directly in your terminal with subtitles for README or documentation work:
+
+```
+go run main.go list --long
+```
 
 ## License
 
