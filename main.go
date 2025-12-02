@@ -422,10 +422,11 @@ func drawScenario(img *image.RGBA, rect image.Rectangle, s Scenario) {
 	for _, e := range s.Edges {
 		from := positions[e.From]
 		to := positions[e.To]
-		drawArrow(img, from.X, from.Y, to.X, to.Y, color.RGBA{0, 0, 0, 255})
 		if e.Bidirectional {
-			// mutualism: second arrow with slight vertical offset
-			drawArrow(img, to.X, to.Y-8, from.X, from.Y-8, color.RGBA{0, 0, 0, 255})
+			drawBidirectionalArrow(img, from.X, from.Y, to.X, to.Y, color.RGBA{0, 0, 0, 255})
+		} else {
+			// Single arrow for unidirectional influence
+			drawArrow(img, from.X, from.Y, to.X, to.Y, color.RGBA{0, 0, 0, 255})
 		}
 	}
 
@@ -572,6 +573,51 @@ func drawArrow(img *image.RGBA, x0, y0, x1, y1 int, col color.Color) {
 		int(p3x), int(p3y),
 		col,
 	)
+}
+
+func drawBidirectionalArrow(img *image.RGBA, x0, y0, x1, y1 int, col color.Color) {
+	const nodeRadius = 20.0
+
+	dx := float64(x1 - x0)
+	dy := float64(y1 - y0)
+	dist := math.Hypot(dx, dy)
+	if dist == 0 {
+		return
+	}
+
+	ux := dx / dist
+	uy := dy / dist
+
+	// shorten line so it meets node edges
+	tailX := float64(x0) + ux*nodeRadius
+	tailY := float64(y0) + uy*nodeRadius
+	headX := float64(x1) - ux*nodeRadius
+	headY := float64(y1) - uy*nodeRadius
+
+	drawLine(img, int(tailX), int(tailY), int(headX), int(headY), col)
+
+	// arrowhead setup
+	arrowLen := 10.0
+	perpX := -uy
+	perpY := ux
+
+	// arrowhead at (x1, y1) end
+	hx1 := headX
+	hy1 := headY
+	p2x1 := hx1 - ux*arrowLen + perpX*(arrowLen/2)
+	p2y1 := hy1 - uy*arrowLen + perpY*(arrowLen/2)
+	p3x1 := hx1 - ux*arrowLen - perpX*(arrowLen/2)
+	p3y1 := hy1 - uy*arrowLen - perpY*(arrowLen/2)
+	fillTriangle(img, int(hx1), int(hy1), int(p2x1), int(p2y1), int(p3x1), int(p3y1), col)
+
+	// arrowhead at (x0, y0) end
+	hx2 := tailX
+	hy2 := tailY
+	p2x2 := hx2 + ux*arrowLen + perpX*(arrowLen/2)
+	p2y2 := hy2 + uy*arrowLen + perpY*(arrowLen/2)
+	p3x2 := hx2 + ux*arrowLen - perpX*(arrowLen/2)
+	p3y2 := hy2 + uy*arrowLen - perpY*(arrowLen/2)
+	fillTriangle(img, int(hx2), int(hy2), int(p2x2), int(p2y2), int(p3x2), int(p3y2), col)
 }
 
 func drawLine(img *image.RGBA, x0, y0, x1, y1 int, col color.Color) {
