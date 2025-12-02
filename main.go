@@ -423,10 +423,11 @@ func drawScenario(img *image.RGBA, rect image.Rectangle, s Scenario) {
 		from := positions[e.From]
 		to := positions[e.To]
 		if e.Bidirectional {
-			// mutualism: two arrows with slight vertical offset
+			// Symmetrical arrows for mutualism
 			drawArrow(img, from.X, from.Y-4, to.X, to.Y-4, color.RGBA{0, 0, 0, 255})
 			drawArrow(img, to.X, to.Y+4, from.X, from.Y+4, color.RGBA{0, 0, 0, 255})
 		} else {
+			// Single arrow for unidirectional influence
 			drawArrow(img, from.X, from.Y, to.X, to.Y, color.RGBA{0, 0, 0, 255})
 		}
 	}
