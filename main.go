@@ -422,10 +422,12 @@ func drawScenario(img *image.RGBA, rect image.Rectangle, s Scenario) {
 	for _, e := range s.Edges {
 		from := positions[e.From]
 		to := positions[e.To]
-		drawArrow(img, from.X, from.Y, to.X, to.Y, color.RGBA{0, 0, 0, 255})
 		if e.Bidirectional {
-			// mutualism: second arrow with slight vertical offset
-			drawArrow(img, to.X, to.Y-8, from.X, from.Y-8, color.RGBA{0, 0, 0, 255})
+			// mutualism: two arrows with slight vertical offset
+			drawArrow(img, from.X, from.Y-4, to.X, to.Y-4, color.RGBA{0, 0, 0, 255})
+			drawArrow(img, to.X, to.Y+4, from.X, from.Y+4, color.RGBA{0, 0, 0, 255})
+		} else {
+			drawArrow(img, from.X, from.Y, to.X, to.Y, color.RGBA{0, 0, 0, 255})
 		}
 	}
 
