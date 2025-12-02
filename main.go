@@ -1,3 +1,6 @@
+// interactions: generate a grid of all basic interaction patterns
+// between A and B, with external influences from C and D.
+// Project home: https://github.com/arran4/interactions
 package main
 
 import (
@@ -54,10 +57,7 @@ func generateScenarios() []Scenario {
 		for cPat := 0; cPat < 4; cPat++ {
 			for dPat := 0; dPat < 4; dPat++ {
 				title := abTitle(ab)
-				subtitle := fmt.Sprintf("C: %s   |   D: %s",
-					externalRoleLabel(cPat),
-					externalRoleLabel(dPat),
-				)
+				subtitle := externalSubtitle(cPat, dPat)
 
 				nodesSet := map[string]bool{
 					"A": true,
@@ -99,7 +99,7 @@ func generateScenarios() []Scenario {
 					}
 				}
 
-				// Stable node ordering for nicer layouts
+				// Stable ordering for nicer layouts
 				order := []string{"C", "D", "A", "B"}
 				var nodes []string
 				for _, name := range order {
@@ -135,16 +135,23 @@ func abTitle(ab int) string {
 	}
 }
 
-func externalRoleLabel(p int) string {
+func externalSubtitle(cPat, dPat int) string {
+	return fmt.Sprintf("C %s; D %s",
+		externalSentenceFragment("C", cPat),
+		externalSentenceFragment("D", dPat),
+	)
+}
+
+func externalSentenceFragment(role string, p int) string {
 	switch p {
 	case 0:
-		return "no effect"
+		return "has no effect on A or B"
 	case 1:
-		return "→ A only"
+		return "influences A only"
 	case 2:
-		return "→ B only"
+		return "influences B only"
 	case 3:
-		return "→ A & B"
+		return "influences both A and B"
 	default:
 		return "?"
 	}
@@ -160,7 +167,7 @@ func renderAllScenarios(filename string, scenarios []Scenario) {
 		panelH       = 220
 		cols         = 8 // 8 x 8 grid for 64 scenarios
 		margin       = 20
-		titleHeight  = 40
+		titleHeight  = 50
 		legendHeight = 120
 	)
 
@@ -172,9 +179,10 @@ func renderAllScenarios(filename string, scenarios []Scenario) {
 	canvas := image.NewRGBA(image.Rect(0, 0, imgW, imgH))
 	fillRect(canvas, canvas.Bounds(), color.RGBA{240, 240, 240, 255})
 
-	// Global title at top centre
-	title := "Interaction patterns of A and B with C and D (all combinations)"
-	drawCenteredLabel(canvas, title, imgW/2, margin+20, color.RGBA{10, 10, 10, 255})
+	// Global title and repo URL
+	mainTitle := "Interaction patterns of A and B with C and D (all basic combinations)"
+	drawCenteredLabel(canvas, mainTitle, imgW/2, margin+18, color.RGBA{10, 10, 10, 255})
+	drawCenteredLabel(canvas, "Source: github.com/arran4/interactions", imgW/2, margin+36, color.RGBA{60, 60, 60, 255})
 
 	// Legend area under the title
 	legendTop := margin + titleHeight
@@ -220,7 +228,6 @@ func drawLegend(img *image.RGBA, rect image.Rectangle) {
 	w := rect.Dx() - 2*padding
 	sectionW := w / 3
 
-	// Section titles
 	drawLabel(img, "Legend", x0, y0+12, color.RGBA{20, 20, 20, 255})
 
 	// --- Section 1: single arrow ---
@@ -249,12 +256,15 @@ func drawLegend(img *image.RGBA, rect image.Rectangle) {
 	s3y := s1y
 	drawLabel(img, "Chronology", s3x, s3y-8, color.RGBA{40, 40, 40, 255})
 	drawLabel(img, "Within each panel:", s3x+10, s3y+10, color.Black)
-	drawLabel(img, "Top row = more recent", s3x+10, s3y+30, color.RGBA{60, 60, 60, 255})
-	drawLabel(img, "Bottom row = later", s3x+10, s3y+46, color.RGBA{60, 60, 60, 255})
+	drawLabel(img, "Upper row = earlier (no incoming arrows)", s3x+10, s3y+30, color.RGBA{60, 60, 60, 255})
+	drawLabel(img, "Lower row = later (influenced by others)", s3x+10, s3y+46, color.RGBA{60, 60, 60, 255})
 }
 
-// Within a panel, external nodes (C, D, etc.) are top row (more recent),
-// A and B are bottom row (later).
+// Within a panel, we infer simple chronology from the graph:
+// - nodes with no incoming arrows are "earlier" (upper row)
+// - nodes with at least one incoming arrow are "later" (lower row)
+// This means A and B don't have to be simultaneous or last, and in
+// mutualism-only cases (A ↔ B) they appear on the same row.
 func drawScenario(img *image.RGBA, rect image.Rectangle, s Scenario) {
 	bg := color.RGBA{255, 255, 255, 255}
 	border := color.RGBA{180, 180, 180, 255}
@@ -265,44 +275,64 @@ func drawScenario(img *image.RGBA, rect image.Rectangle, s Scenario) {
 	drawLabel(img, s.Title, rect.Min.X+10, rect.Min.Y+22, color.RGBA{20, 20, 20, 255})
 	drawLabel(img, s.Subtitle, rect.Min.X+10, rect.Min.Y+40, color.RGBA{80, 80, 80, 255})
 
-	// Chronological layout
+	// Layout rows
 	left := rect.Min.X + 40
 	right := rect.Max.X - 40
-	topY := rect.Min.Y + 90  // more recent
+	topY := rect.Min.Y + 90  // earlier
 	botY := rect.Min.Y + 170 // later
 
-	var topNodes, bottomNodes []string
-	for _, name := range s.Nodes {
-		if name == "A" || name == "B" {
-			bottomNodes = append(bottomNodes, name)
-		} else {
-			topNodes = append(topNodes, name)
+	// Compute incoming edge counts
+	incoming := map[string]int{}
+	for _, n := range s.Nodes {
+		incoming[n] = 0
+	}
+	for _, e := range s.Edges {
+		incoming[e.To]++
+		if e.Bidirectional {
+			// mutualism: treat as two directed edges for layering
+			incoming[e.From]++
 		}
+	}
+
+	var early, late []string
+	for _, n := range s.Nodes {
+		if incoming[n] == 0 {
+			early = append(early, n)
+		} else {
+			late = append(late, n)
+		}
+	}
+
+	// Fallbacks: if graph is fully cyclic or fully independent,
+	// put everything in the upper row.
+	if len(early) == 0 {
+		early = s.Nodes
+		late = nil
 	}
 
 	positions := map[string]image.Point{}
 
-	// Position top (external) nodes
-	if len(topNodes) == 1 {
-		positions[topNodes[0]] = image.Point{(left + right) / 2, topY}
-	} else if len(topNodes) > 1 {
-		for i, name := range topNodes {
-			x := left + (right-left)*i/(len(topNodes)-1)
+	// Position early nodes
+	if len(early) == 1 {
+		positions[early[0]] = image.Point{(left + right) / 2, topY}
+	} else if len(early) > 1 {
+		for i, name := range early {
+			x := left + (right-left)*i/(len(early)-1)
 			positions[name] = image.Point{x, topY}
 		}
 	}
 
-	// Position bottom (A, B) nodes
-	if len(bottomNodes) == 1 {
-		positions[bottomNodes[0]] = image.Point{(left + right) / 2, botY}
-	} else if len(bottomNodes) > 1 {
-		for i, name := range bottomNodes {
-			x := left + (right-left)*i/(len(bottomNodes)-1)
+	// Position late nodes
+	if len(late) == 1 {
+		positions[late[0]] = image.Point{(left + right) / 2, botY}
+	} else if len(late) > 1 {
+		for i, name := range late {
+			x := left + (right-left)*i/(len(late)-1)
 			positions[name] = image.Point{x, botY}
 		}
 	}
 
-	// Fallback
+	// Fallback for any missing position
 	for _, name := range s.Nodes {
 		if _, ok := positions[name]; !ok {
 			positions[name] = image.Point{(left + right) / 2, (topY + botY) / 2}
@@ -315,7 +345,7 @@ func drawScenario(img *image.RGBA, rect image.Rectangle, s Scenario) {
 		to := positions[e.To]
 		drawArrow(img, from.X, from.Y, to.X, to.Y, color.RGBA{0, 0, 0, 255})
 		if e.Bidirectional {
-			// mutualism: second arrow with slight offset
+			// mutualism: second arrow with slight vertical offset
 			drawArrow(img, to.X, to.Y-8, from.X, from.Y-8, color.RGBA{0, 0, 0, 255})
 		}
 	}
@@ -360,7 +390,7 @@ func drawLabel(img *image.RGBA, text string, x, y int, col color.Color) {
 }
 
 func drawCenteredLabel(img *image.RGBA, text string, centerX, y int, col color.Color) {
-	// Approximate text width: 7px per char for Face7x13
+	// Approximate text width: ~7px per char for Face7x13
 	width := len(text) * 7
 	x := centerX - width/2
 	drawLabel(img, text, x, y, col)
