@@ -21,9 +21,9 @@ import (
 )
 
 type Node struct {
-	Name     string
-	Y        int // Vertical layer, 0 is top.
-	Duration int // 0 for event, >0 for process
+	Name      string
+	Y         int  // Vertical layer, 0 is top.
+	IsProcess bool // true for rectangle (duration), false for circle (event)
 }
 
 type Edge struct {
@@ -134,48 +134,52 @@ func generateScenarios() []Scenario {
 	cPatterns := []string{"none", "C->A", "C->B", "C->A,B"}
 	dPatterns := []string{"none", "D->A", "D->B", "D->A,B"}
 	timePatterns := []string{"A,B same", "A before B", "B before A"}
-
-	type typeDurationPattern struct {
-		Name         string
-		ADuration    int
-		BDuration    int
-		IsMeaningful bool // False if it's just a permutation of another
-	}
-	typeDurationPatterns := []typeDurationPattern{
-		{"A,B events", 0, 0, true},
-		{"A event, B process (short)", 0, 1, true},
-		{"A event, B process (long)", 0, 2, true},
-		{"A process (short), B event", 1, 0, true},
-		{"A process (long), B event", 2, 0, true},
-		{"A,B processes (short)", 1, 1, true},
-		{"A,B processes (long)", 2, 2, true},
-		{"A process (short), B (long)", 1, 2, true},
-		{"A process (long), B (short)", 2, 1, false},
-	}
+	typePatterns := []string{"A,B events", "A event, B process", "A process, B event", "A,B processes"}
 
 	for _, abPat := range abPatterns {
 		for _, cPat := range cPatterns {
 			for _, dPat := range dPatterns {
 				for _, timePat := range timePatterns {
-					for _, tdp := range typeDurationPatterns {
+					for _, typePat := range typePatterns {
 						s := Scenario{
-							Title:    fmt.Sprintf("AB: %s, Time: %s, Type: %s", abPat, timePat, tdp.Name),
+							Title:    fmt.Sprintf("AB: %s, Time: %s, Type: %s", abPat, timePat, typePat),
 							Subtitle: fmt.Sprintf("C: %s, D: %s", cPat, dPat),
 						}
 
-						aNode := Node{Name: "A", Duration: tdp.ADuration}
-						bNode := Node{Name: "B", Duration: tdp.BDuration}
+						var aNode, bNode Node
+						aNode.Name = "A"
+						bNode.Name = "B"
+
+						switch typePat {
+						case "A,B events":
+							aNode.IsProcess, bNode.IsProcess = false, false
+						case "A event, B process":
+							aNode.IsProcess, bNode.IsProcess = false, true
+						case "A process, B event":
+							aNode.IsProcess, bNode.IsProcess = true, false
+						case "A,B processes":
+							aNode.IsProcess, bNode.IsProcess = true, true
+						}
 
 						// Set Y based on sequence, accounting for duration
+						aDuration := 0
+						if aNode.IsProcess {
+							aDuration = 1
+						}
+						bDuration := 0
+						if bNode.IsProcess {
+							bDuration = 1
+						}
+
 						switch timePat {
 						case "A,B same":
 							aNode.Y, bNode.Y = 0, 0
 						case "A before B":
 							aNode.Y = 0
-							bNode.Y = aNode.Y + aNode.Duration + 1
+							bNode.Y = aNode.Y + aDuration + 1
 						case "B before A":
 							bNode.Y = 0
-							aNode.Y = bNode.Y + bNode.Duration + 1
+							aNode.Y = bNode.Y + bDuration + 1
 						}
 						s.Nodes = append(s.Nodes, aNode, bNode)
 
@@ -189,7 +193,7 @@ func generateScenarios() []Scenario {
 						}
 
 						if cPat != "none" {
-							s.Nodes = append(s.Nodes, Node{Name: "C", Y: 0, Duration: 0})
+							s.Nodes = append(s.Nodes, Node{Name: "C", Y: 0, IsProcess: false})
 							if cPat == "C->A" || cPat == "C->A,B" {
 								s.Edges = append(s.Edges, Edge{From: "C", To: "A"})
 							}
@@ -198,7 +202,7 @@ func generateScenarios() []Scenario {
 							}
 						}
 						if dPat != "none" {
-							s.Nodes = append(s.Nodes, Node{Name: "D", Y: 0, Duration: 0})
+							s.Nodes = append(s.Nodes, Node{Name: "D", Y: 0, IsProcess: false})
 							if dPat == "D->A" || dPat == "D->A,B" {
 								s.Edges = append(s.Edges, Edge{From: "D", To: "A"})
 							}
@@ -318,9 +322,9 @@ func drawLegend(img *image.RGBA, rect image.Rectangle) {
 
 	// Event vs Process
 	drawNode(img, s3x+20, s3y+15, 10, color.White, color.Black)
-	drawLabel(img, "Circle: event (instantaneous)", s3x+40, s3y+20, color.Black)
-	drawProcess(img, s3x+20, s3y+45, 20, 10, color.White, color.Black)
-	drawLabel(img, "Rectangle: process (duration)", s3x+40, s3y+50, color.Black)
+	drawLabel(img, "Circle: point in time", s3x+40, s3y+20, color.Black)
+	drawProcess(img, s3x+20, s3y+45, 20, 20, color.White, color.Black)
+	drawLabel(img, "Rectangle: from/to", s3x+40, s3y+50, color.Black)
 
 	// Vertical position
 	drawLabel(img, "Vertical position: sequence", s3x+10, s3y+70, color.Black)
@@ -335,23 +339,30 @@ func drawScenario(img *image.RGBA, rect image.Rectangle, s Scenario) {
 
 	// Title & subtitle
 	textX := rect.Min.X + 10
+	textY := rect.Min.Y + 22
 	maxTextWidth := rect.Dx() - 20
-	drawWrappedLabel(img, s.Title, textX, rect.Min.Y+22, maxTextWidth, color.RGBA{20, 20, 20, 255})
+	titleHeight := drawWrappedLabel(img, s.Title, textX, textY, maxTextWidth, color.RGBA{20, 20, 20, 255})
+	subtitleHeight := drawWrappedLabel(img, s.Subtitle, textX, textY+titleHeight, maxTextWidth, color.RGBA{80, 80, 80, 255})
+	headerHeight := titleHeight + subtitleHeight
 
 	// Group nodes by Y level, and find total timeline height
 	levels := make(map[int][]Node)
 	maxY := 0
 	for _, n := range s.Nodes {
 		levels[n.Y] = append(levels[n.Y], n)
-		endY := n.Y + n.Duration
+		endY := n.Y
+		if n.IsProcess {
+			endY++
+		}
 		if endY > maxY {
 			maxY = endY
 		}
 	}
 
 	// Vertical positioning
-	yStep := (rect.Max.Y - rect.Min.Y - 80) / (maxY + 1)
-	yOffset := rect.Min.Y + 80
+	diagramAreaHeight := rect.Dy() - headerHeight - 30
+	yStep := diagramAreaHeight / (maxY + 1)
+	yOffset := rect.Min.Y + headerHeight + 20
 
 	positions := make(map[string]image.Point)
 	for yLevel, nodes := range levels {
@@ -362,6 +373,16 @@ func drawScenario(img *image.RGBA, rect image.Rectangle, s Scenario) {
 				X: xOffset + i*xStep,
 				Y: yOffset + yLevel*yStep,
 			}
+		}
+	}
+
+	// Get node heights
+	nodeHeights := make(map[string]int)
+	for _, n := range s.Nodes {
+		if n.IsProcess {
+			nodeHeights[n.Name] = yStep
+		} else {
+			nodeHeights[n.Name] = 20 // Circle diameter
 		}
 	}
 
@@ -376,36 +397,20 @@ func drawScenario(img *image.RGBA, rect image.Rectangle, s Scenario) {
 		fromNode := nodesByName[e.From]
 		toNode := nodesByName[e.To]
 
-		fromIsProcess := fromNode.Duration > 0
-		toIsProcess := toNode.Duration > 0
-
-		// Visual center for arrow connections
+		// For processes, arrows should connect to the visual center.
 		fromY := fromPos.Y
-		if fromIsProcess {
-			fromY += (fromNode.Duration * yStep) / 2
+		if fromNode.IsProcess {
+			fromY += yStep / 2
 		}
 		toY := toPos.Y
-		if toIsProcess {
-			toY += (toNode.Duration * yStep) / 2
-		}
-
-		// Get the correct pixel height of the node shapes
-		var fromH, toH int
-		if fromIsProcess {
-			fromH = fromNode.Duration * yStep
-		} else {
-			fromH = 20 // Diameter of circle
-		}
-		if toIsProcess {
-			toH = toNode.Duration * yStep
-		} else {
-			toH = 20 // Diameter of circle
+		if toNode.IsProcess {
+			toY += yStep / 2
 		}
 
 		if e.Bidirectional {
-			drawBidirectionalArrow(img, fromPos.X, fromY, toPos.X, toY, color.RGBA{0, 0, 0, 255}, fromIsProcess, toIsProcess, fromH, toH)
+			drawBidirectionalArrow(img, fromPos.X, fromY, toPos.X, toY, color.RGBA{0, 0, 0, 255}, fromNode.IsProcess, toNode.IsProcess, nodeHeights[e.From], nodeHeights[e.To])
 		} else {
-			drawArrow(img, fromPos.X, fromY, toPos.X, toY, color.RGBA{0, 0, 0, 255}, fromIsProcess, toIsProcess, fromH, toH)
+			drawArrow(img, fromPos.X, fromY, toPos.X, toY, color.RGBA{0, 0, 0, 255}, fromNode.IsProcess, toNode.IsProcess, nodeHeights[e.From], nodeHeights[e.To])
 		}
 	}
 
@@ -414,9 +419,9 @@ func drawScenario(img *image.RGBA, rect image.Rectangle, s Scenario) {
 	nodeBorder := color.RGBA{20, 40, 120, 255}
 	for _, n := range s.Nodes {
 		pt := positions[n.Name]
-		if n.Duration > 0 {
-			h := n.Duration * yStep
-			drawProcess(img, pt.X, pt.Y+h/2, 40, h, nodeFill, nodeBorder)
+		if n.IsProcess {
+			// A process rectangle starts at its time step and extends down.
+			drawProcess(img, pt.X, pt.Y+yStep/2, 40, yStep, nodeFill, nodeBorder)
 		} else {
 			drawNode(img, pt.X, pt.Y, 20, nodeFill, nodeBorder)
 		}
