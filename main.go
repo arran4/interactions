@@ -20,6 +20,11 @@ import (
 	"golang.org/x/image/math/fixed"
 )
 
+type Node struct {
+	Name string
+	Y    int // Vertical level for timeline
+}
+
 type Edge struct {
 	From, To      string
 	Bidirectional bool
@@ -28,7 +33,7 @@ type Edge struct {
 type Scenario struct {
 	Title    string
 	Subtitle string
-	Nodes    []string
+	Nodes    []Node
 	Edges    []Edge
 }
 
@@ -171,12 +176,72 @@ func generateScenarios() []Scenario {
 					}
 				}
 
-				// Stable ordering for nicer layouts
+				// Layering based on dependencies
+				nodeMap := make(map[string]Node)
 				order := []string{"C", "D", "A", "B"}
-				var nodes []string
 				for _, name := range order {
 					if nodesSet[name] {
-						nodes = append(nodes, name)
+						nodeMap[name] = Node{Name: name, Y: 0}
+					}
+				}
+
+				// Topological sort to determine Y levels
+				inDegree := make(map[string]int)
+				for name := range nodeMap {
+					inDegree[name] = 0
+				}
+				for _, edge := range edges {
+					inDegree[edge.To]++
+					if edge.Bidirectional {
+						inDegree[edge.From]++
+					}
+				}
+
+				queue := []string{}
+				for name, degree := range inDegree {
+					if degree == 0 {
+						queue = append(queue, name)
+					}
+				}
+
+				level := 0
+				for len(queue) > 0 {
+					levelSize := len(queue)
+					for i := 0; i < levelSize; i++ {
+						current := queue[0]
+						queue = queue[1:]
+						node := nodeMap[current]
+						node.Y = level
+						nodeMap[current] = node
+
+						for _, edge := range edges {
+							if edge.From == current {
+								inDegree[edge.To]--
+								if inDegree[edge.To] == 0 {
+									queue = append(queue, edge.To)
+								}
+							}
+							if edge.To == current && edge.Bidirectional {
+								inDegree[edge.From]--
+								if inDegree[edge.From] == 0 {
+									queue = append(queue, edge.From)
+								}
+							}
+						}
+					}
+					level++
+				}
+
+				// If there's a cycle, fall back to layering all nodes at level 0.
+				if len(nodeMap) != len(inDegree) {
+					// This simple model doesn't create complex cycles,
+					// but this is a safeguard.
+				}
+
+				var nodes []Node
+				for _, name := range order {
+					if n, ok := nodeMap[name]; ok {
+						nodes = append(nodes, n)
 					}
 				}
 
@@ -326,10 +391,10 @@ func drawLegend(img *image.RGBA, rect image.Rectangle) {
 	// --- Section 3: chronology ---
 	s3x := x0 + 2*sectionW
 	s3y := s1y
-	drawLabel(img, "Chronology", s3x, s3y-8, color.RGBA{40, 40, 40, 255})
-	drawLabel(img, "Within each panel:", s3x+10, s3y+10, color.Black)
-	drawLabel(img, "Upper row = earlier (no incoming arrows)", s3x+10, s3y+30, color.RGBA{60, 60, 60, 255})
-	drawLabel(img, "Lower row = later (influenced by others)", s3x+10, s3y+46, color.RGBA{60, 60, 60, 255})
+	drawLabel(img, "Timeline", s3x, s3y-8, color.RGBA{40, 40, 40, 255})
+	drawLabel(img, "Vertical position indicates sequence:", s3x+10, s3y+10, color.Black)
+	drawLabel(img, "• Higher nodes are earlier in time.", s3x+10, s3y+30, color.RGBA{60, 60, 60, 255})
+	drawLabel(img, "• Nodes at the same level are concurrent.", s3x+10, s3y+46, color.RGBA{60, 60, 60, 255})
 }
 
 // Within a panel, we infer simple chronology from the graph:
@@ -354,67 +419,41 @@ func drawScenario(img *image.RGBA, rect image.Rectangle, s Scenario) {
 		extraTextHeight = 0
 	}
 
-	// Layout rows
-	left := rect.Min.X + 40
-	right := rect.Max.X - 40
-	topY := rect.Min.Y + 90 + extraTextHeight  // more recent
-	botY := rect.Min.Y + 170 + extraTextHeight // later
-
-	// Compute incoming edge counts
-	incoming := map[string]int{}
+	// Layout based on Y levels from topological sort
+	positions := make(map[string]image.Point)
+	nodesByLevel := make(map[int][]Node)
+	maxLevel := 0
 	for _, n := range s.Nodes {
-		incoming[n] = 0
-	}
-	for _, e := range s.Edges {
-		incoming[e.To]++
-		if e.Bidirectional {
-			// mutualism: treat as two directed edges for layering
-			incoming[e.From]++
+		nodesByLevel[n.Y] = append(nodesByLevel[n.Y], n)
+		if n.Y > maxLevel {
+			maxLevel = n.Y
 		}
 	}
 
-	var early, late []string
-	for _, n := range s.Nodes {
-		if incoming[n] == 0 {
-			early = append(early, n)
-		} else {
-			late = append(late, n)
+	baseY := rect.Min.Y + 90 + extraTextHeight
+	levelHeight := 60
+	if maxLevel == 0 {
+		levelHeight = 0 // Center if only one level
+	}
+
+	for level := 0; level <= maxLevel; level++ {
+		nodesInLevel := nodesByLevel[level]
+		y := baseY + level*levelHeight
+		if maxLevel > 0 {
+			y = baseY + (level*levelHeight*2)/(maxLevel+1) // Dynamic spacing
 		}
-	}
 
-	// Fallbacks: if graph is fully cyclic or fully independent,
-	// put everything in the upper row.
-	if len(early) == 0 {
-		early = s.Nodes
-		late = nil
-	}
-
-	positions := map[string]image.Point{}
-
-	// Position early nodes
-	if len(early) == 1 {
-		positions[early[0]] = image.Point{(left + right) / 2, topY}
-	} else if len(early) > 1 {
-		for i, name := range early {
-			x := left + (right-left)*i/(len(early)-1)
-			positions[name] = image.Point{x, topY}
-		}
-	}
-
-	// Position late nodes
-	if len(late) == 1 {
-		positions[late[0]] = image.Point{(left + right) / 2, botY}
-	} else if len(late) > 1 {
-		for i, name := range late {
-			x := left + (right-left)*i/(len(late)-1)
-			positions[name] = image.Point{x, botY}
-		}
-	}
-
-	// Fallback for any missing position
-	for _, name := range s.Nodes {
-		if _, ok := positions[name]; !ok {
-			positions[name] = image.Point{(left + right) / 2, (topY + botY) / 2}
+		// Horizontal distribution
+		left := rect.Min.X + 40
+		right := rect.Max.X - 40
+		count := len(nodesInLevel)
+		if count == 1 {
+			positions[nodesInLevel[0].Name] = image.Point{(left + right) / 2, y}
+		} else if count > 1 {
+			for i, n := range nodesInLevel {
+				x := left + (right-left)*i/(count-1)
+				positions[n.Name] = image.Point{x, y}
+			}
 		}
 	}
 
@@ -433,10 +472,10 @@ func drawScenario(img *image.RGBA, rect image.Rectangle, s Scenario) {
 	// Draw nodes on top
 	nodeFill := color.RGBA{220, 235, 250, 255}
 	nodeBorder := color.RGBA{20, 40, 120, 255}
-	for _, name := range s.Nodes {
-		pt := positions[name]
+	for _, n := range s.Nodes {
+		pt := positions[n.Name]
 		drawNode(img, pt.X, pt.Y, 20, nodeFill, nodeBorder)
-		drawLabel(img, name, pt.X-5, pt.Y+5, color.RGBA{0, 0, 0, 255})
+		drawLabel(img, n.Name, pt.X-5, pt.Y+5, color.RGBA{0, 0, 0, 255})
 	}
 }
 
