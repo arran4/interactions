@@ -290,7 +290,7 @@ func drawLegend(img *image.RGBA, rect image.Rectangle) {
 
 	sx1, sy1 := s1x+10, s1y
 	sx2, sy2 := sx1+60, sy1
-	drawArrow(img, sx1, sy1, sx2, sy2, color.Black, false, false)
+	drawArrow(img, sx1, sy1, sx2, sy2, color.Black, false, false, 0, 0)
 	drawLabel(img, "Single arrow: influence (e.g. C → A)", sx2+10, sy1+4, color.Black)
 
 	// --- Section 2: mutualism ---
@@ -300,8 +300,8 @@ func drawLegend(img *image.RGBA, rect image.Rectangle) {
 
 	mx1, my1 := s2x+10, s2y
 	mx2, my2 := mx1+60, my1
-	drawArrow(img, mx1, my1-3, mx2, my2-3, color.Black, false, false)
-	drawArrow(img, mx2, my2+3, mx1, my1+3, color.Black, false, false)
+	drawArrow(img, mx1, my1-3, mx2, my2-3, color.Black, false, false, 0, 0)
+	drawArrow(img, mx2, my2+3, mx1, my1+3, color.Black, false, false, 0, 0)
 	drawLabel(img, "Double arrow: mutualism (A ↔ B)", mx2+10, my1+4, color.Black)
 
 	// --- Section 3: chronology ---
@@ -357,20 +357,41 @@ func drawScenario(img *image.RGBA, rect image.Rectangle, s Scenario) {
 		}
 	}
 
+	// Get node heights
+	nodeHeights := make(map[string]int)
+	for _, n := range s.Nodes {
+		if n.IsProcess {
+			nodeHeights[n.Name] = yStep
+		} else {
+			nodeHeights[n.Name] = 20 // Circle diameter
+		}
+	}
+
 	// Draw edges first
 	nodesByName := make(map[string]Node)
 	for _, n := range s.Nodes {
 		nodesByName[n.Name] = n
 	}
 	for _, e := range s.Edges {
-		from := positions[e.From]
-		to := positions[e.To]
+		fromPos := positions[e.From]
+		toPos := positions[e.To]
 		fromNode := nodesByName[e.From]
 		toNode := nodesByName[e.To]
+
+		// For processes, arrows should connect to the visual center.
+		fromY := fromPos.Y
+		if fromNode.IsProcess {
+			fromY += yStep / 2
+		}
+		toY := toPos.Y
+		if toNode.IsProcess {
+			toY += yStep / 2
+		}
+
 		if e.Bidirectional {
-			drawBidirectionalArrow(img, from.X, from.Y, to.X, to.Y, color.RGBA{0, 0, 0, 255}, fromNode.IsProcess, toNode.IsProcess)
+			drawBidirectionalArrow(img, fromPos.X, fromY, toPos.X, toY, color.RGBA{0, 0, 0, 255}, fromNode.IsProcess, toNode.IsProcess, nodeHeights[e.From], nodeHeights[e.To])
 		} else {
-			drawArrow(img, from.X, from.Y, to.X, to.Y, color.RGBA{0, 0, 0, 255}, fromNode.IsProcess, toNode.IsProcess)
+			drawArrow(img, fromPos.X, fromY, toPos.X, toY, color.RGBA{0, 0, 0, 255}, fromNode.IsProcess, toNode.IsProcess, nodeHeights[e.From], nodeHeights[e.To])
 		}
 	}
 
@@ -380,11 +401,12 @@ func drawScenario(img *image.RGBA, rect image.Rectangle, s Scenario) {
 	for _, n := range s.Nodes {
 		pt := positions[n.Name]
 		if n.IsProcess {
-			drawProcess(img, pt.X, pt.Y, 40, 20, nodeFill, nodeBorder)
+			// A process rectangle starts at its time step and extends down.
+			drawProcess(img, pt.X, pt.Y+yStep/2, 40, yStep, nodeFill, nodeBorder)
 		} else {
 			drawNode(img, pt.X, pt.Y, 20, nodeFill, nodeBorder)
 		}
-		drawLabel(img, n.Name, pt.X-5, pt.Y+5, color.RGBA{0, 0, 0, 255})
+		drawLabel(img, n.Name, pt.X-5, pt.Y-10, color.RGBA{0, 0, 0, 255})
 	}
 }
 
@@ -398,7 +420,7 @@ func drawProcess(img *image.RGBA, cx, cy, w, h int, fill, border color.Color) {
 // Drawing helpers
 // ----------------------------------------------------------------------
 
-func intersectionPoint(x, y, otherX, otherY int, isProcess bool) image.Point {
+func intersectionPoint(x, y, otherX, otherY int, isProcess bool, h int) image.Point {
 	if !isProcess {
 		const nodeRadius = 20.0
 		dx := float64(otherX - x)
@@ -413,10 +435,7 @@ func intersectionPoint(x, y, otherX, otherY int, isProcess bool) image.Point {
 		}
 	}
 
-	const (
-		w = 40
-		h = 20
-	)
+	const w = 40
 	dx := float64(otherX - x)
 	dy := float64(otherY - y)
 
@@ -530,7 +549,7 @@ func drawNode(img *image.RGBA, cx, cy, r int, fill, border color.Color) {
 	}
 }
 
-func drawArrow(img *image.RGBA, x0, y0, x1, y1 int, col color.Color, fromProcess, toProcess bool) {
+func drawArrow(img *image.RGBA, x0, y0, x1, y1 int, col color.Color, fromProcess, toProcess bool, fromH, toH int) {
 	dx := float64(x1 - x0)
 	dy := float64(y1 - y0)
 	dist := math.Hypot(dx, dy)
@@ -542,8 +561,8 @@ func drawArrow(img *image.RGBA, x0, y0, x1, y1 int, col color.Color, fromProcess
 	uy := dy / dist
 
 	// shorten line so it meets node edges
-	tail := intersectionPoint(x0, y0, x1, y1, fromProcess)
-	head := intersectionPoint(x1, y1, x0, y0, toProcess)
+	tail := intersectionPoint(x0, y0, x1, y1, fromProcess, fromH)
+	head := intersectionPoint(x1, y1, x0, y0, toProcess, toH)
 
 	drawLine(img, tail.X, tail.Y, head.X, head.Y, col)
 
@@ -568,7 +587,7 @@ func drawArrow(img *image.RGBA, x0, y0, x1, y1 int, col color.Color, fromProcess
 	)
 }
 
-func drawBidirectionalArrow(img *image.RGBA, x0, y0, x1, y1 int, col color.Color, fromProcess, toProcess bool) {
+func drawBidirectionalArrow(img *image.RGBA, x0, y0, x1, y1 int, col color.Color, fromProcess, toProcess bool, fromH, toH int) {
 	dx := float64(x1 - x0)
 	dy := float64(y1 - y0)
 	dist := math.Hypot(dx, dy)
@@ -580,8 +599,8 @@ func drawBidirectionalArrow(img *image.RGBA, x0, y0, x1, y1 int, col color.Color
 	uy := dy / dist
 
 	// shorten line so it meets node edges
-	tail := intersectionPoint(x0, y0, x1, y1, fromProcess)
-	head := intersectionPoint(x1, y1, x0, y0, toProcess)
+	tail := intersectionPoint(x0, y0, x1, y1, fromProcess, fromH)
+	head := intersectionPoint(x1, y1, x0, y0, toProcess, toH)
 
 	drawLine(img, tail.X, tail.Y, head.X, head.Y, col)
 
