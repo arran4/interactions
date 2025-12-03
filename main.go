@@ -26,10 +26,11 @@ type Edge struct {
 }
 
 type Scenario struct {
-	Title    string
-	Subtitle string
-	Nodes    []string
-	Edges    []Edge
+	Title           string
+	Subtitle        string
+	Nodes           []string
+	Edges           []Edge
+	SequentialEdges []Edge
 }
 
 func main() {
@@ -116,6 +117,8 @@ func printGlobalUsage() {
 // 1 = A -> B
 // 2 = B -> A
 // 3 = A <-> B (mutualism)
+// 4 = A -> B, then B -> A (feedback)
+// 5 = B -> A, then A -> B (feedback)
 //
 // External pattern codes for C and D:
 // 0 = no edges
@@ -125,7 +128,7 @@ func printGlobalUsage() {
 func generateScenarios() []Scenario {
 	var scenarios []Scenario
 
-	for ab := 0; ab < 4; ab++ {
+	for ab := 0; ab < 6; ab++ {
 		for cPat := 0; cPat < 4; cPat++ {
 			for dPat := 0; dPat < 4; dPat++ {
 				title := abTitle(ab)
@@ -135,7 +138,7 @@ func generateScenarios() []Scenario {
 					"A": true,
 					"B": true,
 				}
-				var edges []Edge
+				var edges, sequentialEdges []Edge
 
 				// A-B edges
 				switch ab {
@@ -147,6 +150,12 @@ func generateScenarios() []Scenario {
 					edges = append(edges, Edge{"B", "A", false})
 				case 3:
 					edges = append(edges, Edge{"A", "B", true}) // mutualism
+				case 4:
+					edges = append(edges, Edge{"A", "B", false})
+					sequentialEdges = append(sequentialEdges, Edge{"B", "A", false})
+				case 5:
+					edges = append(edges, Edge{"B", "A", false})
+					sequentialEdges = append(sequentialEdges, Edge{"A", "B", false})
 				}
 
 				// C edges
@@ -181,10 +190,11 @@ func generateScenarios() []Scenario {
 				}
 
 				scenarios = append(scenarios, Scenario{
-					Title:    title,
-					Subtitle: subtitle,
-					Nodes:    nodes,
-					Edges:    edges,
+					Title:           title,
+					Subtitle:        subtitle,
+					Nodes:           nodes,
+					Edges:           edges,
+					SequentialEdges: sequentialEdges,
 				})
 			}
 		}
@@ -202,6 +212,10 @@ func abTitle(ab int) string {
 		return "B → A"
 	case 3:
 		return "A ↔ B (mutualism)"
+	case 4:
+		return "A → B, then B → A (feedback)"
+	case 5:
+		return "B → A, then A → B (feedback)"
 	default:
 		return "A/B pattern ?"
 	}
@@ -327,9 +341,14 @@ func drawLegend(img *image.RGBA, rect image.Rectangle) {
 	s3x := x0 + 2*sectionW
 	s3y := s1y
 	drawLabel(img, "Chronology", s3x, s3y-8, color.RGBA{40, 40, 40, 255})
-	drawLabel(img, "Within each panel:", s3x+10, s3y+10, color.Black)
-	drawLabel(img, "Upper row = earlier (no incoming arrows)", s3x+10, s3y+30, color.RGBA{60, 60, 60, 255})
-	drawLabel(img, "Lower row = later (influenced by others)", s3x+10, s3y+46, color.RGBA{60, 60, 60, 255})
+	drawLabel(img, "Upper row: earlier actions", s3x+10, s3y+10, color.RGBA{60, 60, 60, 255})
+	drawLabel(img, "Lower row: later actions", s3x+10, s3y+26, color.RGBA{60, 60, 60, 255})
+
+	// Add feedback loop example to chronology
+	fx1, fy1 := s3x+10, s3y+52
+	fx2, fy2 := fx1+60, fy1
+	drawArrow(img, fx1, fy1, fx2, fy2, color.RGBA{180, 0, 0, 255})
+	drawLabel(img, "Red arrow: sequential feedback", fx2+10, fy1+4, color.Black)
 }
 
 // Within a panel, we infer simple chronology from the graph:
@@ -360,7 +379,7 @@ func drawScenario(img *image.RGBA, rect image.Rectangle, s Scenario) {
 	topY := rect.Min.Y + 90 + extraTextHeight  // more recent
 	botY := rect.Min.Y + 170 + extraTextHeight // later
 
-	// Compute incoming edge counts
+	// Compute incoming edge counts for initial actions
 	incoming := map[string]int{}
 	for _, n := range s.Nodes {
 		incoming[n] = 0
@@ -372,6 +391,9 @@ func drawScenario(img *image.RGBA, rect image.Rectangle, s Scenario) {
 			incoming[e.From]++
 		}
 	}
+
+	// In feedback loops, the second action shouldn't push a node
+	// down. We only consider the primary edges for layout.
 
 	var early, late []string
 	for _, n := range s.Nodes {
@@ -419,15 +441,23 @@ func drawScenario(img *image.RGBA, rect image.Rectangle, s Scenario) {
 	}
 
 	// Draw edges first
+	edgeColor := color.RGBA{0, 0, 0, 255}
 	for _, e := range s.Edges {
 		from := positions[e.From]
 		to := positions[e.To]
 		if e.Bidirectional {
-			drawBidirectionalArrow(img, from.X, from.Y, to.X, to.Y, color.RGBA{0, 0, 0, 255})
+			drawBidirectionalArrow(img, from.X, from.Y, to.X, to.Y, edgeColor)
 		} else {
 			// Single arrow for unidirectional influence
-			drawArrow(img, from.X, from.Y, to.X, to.Y, color.RGBA{0, 0, 0, 255})
+			drawArrow(img, from.X, from.Y, to.X, to.Y, edgeColor)
 		}
+	}
+
+	sequentialEdgeColor := color.RGBA{180, 0, 0, 255}
+	for _, e := range s.SequentialEdges {
+		from := positions[e.From]
+		to := positions[e.To]
+		drawArrow(img, from.X, from.Y, to.X, to.Y, sequentialEdgeColor)
 	}
 
 	// Draw nodes on top
