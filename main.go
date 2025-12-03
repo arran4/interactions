@@ -20,6 +20,12 @@ import (
 	"golang.org/x/image/math/fixed"
 )
 
+type Node struct {
+	Name      string
+	Y         int  // Vertical layer, 0 is top.
+	IsProcess bool // true for rectangle (duration), false for circle (event)
+}
+
 type Edge struct {
 	From, To      string
 	Bidirectional bool
@@ -28,7 +34,7 @@ type Edge struct {
 type Scenario struct {
 	Title    string
 	Subtitle string
-	Nodes    []string
+	Nodes    []Node
 	Edges    []Edge
 }
 
@@ -107,125 +113,140 @@ func printGlobalUsage() {
 	fmt.Println("  go run main.go list --long")
 }
 
-// ----------------------------------------------------------------------
-// Scenario generation: all combinations
-// ----------------------------------------------------------------------
-//
-// AB pattern codes:
-// 0 = no direct link
-// 1 = A -> B
-// 2 = B -> A
-// 3 = A <-> B (mutualism)
-//
-// External pattern codes for C and D:
-// 0 = no edges
-// 1 = -> A only
-// 2 = -> B only
-// 3 = -> A and B
 func generateScenarios() []Scenario {
-	var scenarios []Scenario
+	return []Scenario{
+		{
+			Title: "A and B are simultaneous events",
+			Nodes: []Node{
+				{Name: "A", Y: 0},
+				{Name: "B", Y: 0},
+			},
+		},
+		{
+			Title: "A and B are simultaneous processes",
+			Nodes: []Node{
+				{Name: "A", Y: 0, IsProcess: true},
+				{Name: "B", Y: 0, IsProcess: true},
+			},
+		},
+		{
+			Title: "A is an event, B is a process",
+			Nodes: []Node{
+				{Name: "A", Y: 0},
+				{Name: "B", Y: 0, IsProcess: true},
+			},
+		},
+		{
+			Title: "A is a process, B is an event",
+			Nodes: []Node{
+				{Name: "A", Y: 0, IsProcess: true},
+				{Name: "B", Y: 0},
+			},
+		},
 
-	for ab := 0; ab < 4; ab++ {
-		for cPat := 0; cPat < 4; cPat++ {
-			for dPat := 0; dPat < 4; dPat++ {
-				title := abTitle(ab)
-				subtitle := externalSubtitle(cPat, dPat)
-
-				nodesSet := map[string]bool{
-					"A": true,
-					"B": true,
-				}
-				var edges []Edge
-
-				// A-B edges
-				switch ab {
-				case 0:
-					// none
-				case 1:
-					edges = append(edges, Edge{"A", "B", false})
-				case 2:
-					edges = append(edges, Edge{"B", "A", false})
-				case 3:
-					edges = append(edges, Edge{"A", "B", true}) // mutualism
-				}
-
-				// C edges
-				if cPat != 0 {
-					nodesSet["C"] = true
-					if cPat == 1 || cPat == 3 {
-						edges = append(edges, Edge{"C", "A", false})
-					}
-					if cPat == 2 || cPat == 3 {
-						edges = append(edges, Edge{"C", "B", false})
-					}
-				}
-
-				// D edges
-				if dPat != 0 {
-					nodesSet["D"] = true
-					if dPat == 1 || dPat == 3 {
-						edges = append(edges, Edge{"D", "A", false})
-					}
-					if dPat == 2 || dPat == 3 {
-						edges = append(edges, Edge{"D", "B", false})
-					}
-				}
-
-				// Stable ordering for nicer layouts
-				order := []string{"C", "D", "A", "B"}
-				var nodes []string
-				for _, name := range order {
-					if nodesSet[name] {
-						nodes = append(nodes, name)
-					}
-				}
-
-				scenarios = append(scenarios, Scenario{
-					Title:    title,
-					Subtitle: subtitle,
-					Nodes:    nodes,
-					Edges:    edges,
-				})
-			}
-		}
-	}
-	return scenarios
-}
-
-func abTitle(ab int) string {
-	switch ab {
-	case 0:
-		return "A & B: no direct link"
-	case 1:
-		return "A → B"
-	case 2:
-		return "B → A"
-	case 3:
-		return "A ↔ B (mutualism)"
-	default:
-		return "A/B pattern ?"
-	}
-}
-
-func externalSubtitle(cPat, dPat int) string {
-	return fmt.Sprintf("C %s; D %s",
-		externalSentenceFragment("C", cPat),
-		externalSentenceFragment("D", dPat),
-	)
-}
-
-func externalSentenceFragment(role string, p int) string {
-	switch p {
-	case 0:
-		return "has no effect on A or B"
-	case 1:
-		return "influences A only"
-	case 2:
-		return "influences B only"
-	case 3:
-		return "influences both A and B"
-	default:
-		return "?"
+		{
+			Title: "Event A happens before event B",
+			Nodes: []Node{
+				{Name: "A", Y: 0},
+				{Name: "B", Y: 1},
+			},
+		},
+		{
+			Title: "Process A happens before process B",
+			Nodes: []Node{
+				{Name: "A", Y: 0, IsProcess: true},
+				{Name: "B", Y: 1, IsProcess: true},
+			},
+		},
+		{
+			Title: "Event A happens before process B",
+			Nodes: []Node{
+				{Name: "A", Y: 0},
+				{Name: "B", Y: 1, IsProcess: true},
+			},
+		},
+		{
+			Title: "Process A happens before event B",
+			Nodes: []Node{
+				{Name: "A", Y: 0, IsProcess: true},
+				{Name: "B", Y: 1},
+			},
+		},
+		{
+			Title: "A influences B (simultaneous)",
+			Nodes: []Node{
+				{Name: "A", Y: 0},
+				{Name: "B", Y: 0},
+			},
+			Edges: []Edge{{"A", "B", false}},
+		},
+		{
+			Title: "A influences B (sequential)",
+			Nodes: []Node{
+				{Name: "A", Y: 0},
+				{Name: "B", Y: 1},
+			},
+			Edges: []Edge{{"A", "B", false}},
+		},
+		{
+			Title: "A influences B (A is process)",
+			Nodes: []Node{
+				{Name: "A", Y: 0, IsProcess: true},
+				{Name: "B", Y: 1},
+			},
+			Edges: []Edge{{"A", "B", false}},
+		},
+		{
+			Title: "A influences B (B is process)",
+			Nodes: []Node{
+				{Name: "A", Y: 0},
+				{Name: "B", Y: 1, IsProcess: true},
+			},
+			Edges: []Edge{{"A", "B", false}},
+		},
+		{
+			Title: "Mutual influence (simultaneous)",
+			Nodes: []Node{
+				{Name: "A", Y: 0},
+				{Name: "B", Y: 0},
+			},
+			Edges: []Edge{{"A", "B", true}},
+		},
+		{
+			Title: "Mutual influence (sequential)",
+			Nodes: []Node{
+				{Name: "A", Y: 0},
+				{Name: "B", Y: 1},
+			},
+			Edges: []Edge{
+				{"A", "B", false},
+				{"B", "A", false},
+			},
+		},
+		{
+			Title: "C influences A and B (simultaneous)",
+			Nodes: []Node{
+				{Name: "C", Y: 0},
+				{Name: "A", Y: 1},
+				{Name: "B", Y: 1},
+			},
+			Edges: []Edge{
+				{"C", "A", false},
+				{"C", "B", false},
+			},
+		},
+		{
+			Title: "C influences A, then A influences B",
+			Nodes: []Node{
+				{Name: "C", Y: 0},
+				{Name: "A", Y: 1},
+				{Name: "B", Y: 2},
+			},
+			Edges: []Edge{
+				{"C", "A", false},
+				{"A", "B", false},
+			},
+		},
 	}
 }
 
@@ -309,7 +330,7 @@ func drawLegend(img *image.RGBA, rect image.Rectangle) {
 
 	sx1, sy1 := s1x+10, s1y
 	sx2, sy2 := sx1+60, sy1
-	drawArrow(img, sx1, sy1, sx2, sy2, color.Black)
+	drawArrow(img, sx1, sy1, sx2, sy2, color.Black, false, false)
 	drawLabel(img, "Single arrow: influence (e.g. C → A)", sx2+10, sy1+4, color.Black)
 
 	// --- Section 2: mutualism ---
@@ -319,24 +340,26 @@ func drawLegend(img *image.RGBA, rect image.Rectangle) {
 
 	mx1, my1 := s2x+10, s2y
 	mx2, my2 := mx1+60, my1
-	drawArrow(img, mx1, my1-3, mx2, my2-3, color.Black)
-	drawArrow(img, mx2, my2+3, mx1, my1+3, color.Black)
+	drawArrow(img, mx1, my1-3, mx2, my2-3, color.Black, false, false)
+	drawArrow(img, mx2, my2+3, mx1, my1+3, color.Black, false, false)
 	drawLabel(img, "Double arrow: mutualism (A ↔ B)", mx2+10, my1+4, color.Black)
 
 	// --- Section 3: chronology ---
 	s3x := x0 + 2*sectionW
 	s3y := s1y
-	drawLabel(img, "Chronology", s3x, s3y-8, color.RGBA{40, 40, 40, 255})
-	drawLabel(img, "Within each panel:", s3x+10, s3y+10, color.Black)
-	drawLabel(img, "Upper row = earlier (no incoming arrows)", s3x+10, s3y+30, color.RGBA{60, 60, 60, 255})
-	drawLabel(img, "Lower row = later (influenced by others)", s3x+10, s3y+46, color.RGBA{60, 60, 60, 255})
+	drawLabel(img, "Chronology & Type", s3x, s3y-8, color.RGBA{40, 40, 40, 255})
+
+	// Event vs Process
+	drawNode(img, s3x+20, s3y+15, 10, color.White, color.Black)
+	drawLabel(img, "Circle: event (instantaneous)", s3x+40, s3y+20, color.Black)
+	drawProcess(img, s3x+20, s3y+45, 20, 10, color.White, color.Black)
+	drawLabel(img, "Rectangle: process (duration)", s3x+40, s3y+50, color.Black)
+
+	// Vertical position
+	drawLabel(img, "Vertical position: sequence", s3x+10, s3y+70, color.Black)
+	drawLabel(img, "(top = earlier, bottom = later)", s3x+10, s3y+85, color.RGBA{60, 60, 60, 255})
 }
 
-// Within a panel, we infer simple chronology from the graph:
-// - nodes with no incoming arrows are "earlier" (upper row)
-// - nodes with at least one incoming arrow are "later" (lower row)
-// This means A and B don't have to be simultaneous or last, and in
-// mutualism-only cases (A ↔ B) they appear on the same row.
 func drawScenario(img *image.RGBA, rect image.Rectangle, s Scenario) {
 	bg := color.RGBA{255, 255, 255, 255}
 	border := color.RGBA{180, 180, 180, 255}
@@ -346,103 +369,117 @@ func drawScenario(img *image.RGBA, rect image.Rectangle, s Scenario) {
 	// Title & subtitle
 	textX := rect.Min.X + 10
 	maxTextWidth := rect.Dx() - 20
-	titleHeight := drawWrappedLabel(img, s.Title, textX, rect.Min.Y+22, maxTextWidth, color.RGBA{20, 20, 20, 255})
-	subtitleY := rect.Min.Y + 22 + titleHeight + 6
-	subtitleHeight := drawWrappedLabel(img, s.Subtitle, textX, subtitleY, maxTextWidth, color.RGBA{80, 80, 80, 255})
-	extraTextHeight := (titleHeight - lineHeight) + (subtitleHeight - lineHeight)
-	if extraTextHeight < 0 {
-		extraTextHeight = 0
-	}
+	drawWrappedLabel(img, s.Title, textX, rect.Min.Y+22, maxTextWidth, color.RGBA{20, 20, 20, 255})
 
-	// Layout rows
-	left := rect.Min.X + 40
-	right := rect.Max.X - 40
-	topY := rect.Min.Y + 90 + extraTextHeight  // more recent
-	botY := rect.Min.Y + 170 + extraTextHeight // later
-
-	// Compute incoming edge counts
-	incoming := map[string]int{}
+	// Group nodes by Y level
+	levels := make(map[int][]Node)
+	maxY := 0
 	for _, n := range s.Nodes {
-		incoming[n] = 0
-	}
-	for _, e := range s.Edges {
-		incoming[e.To]++
-		if e.Bidirectional {
-			// mutualism: treat as two directed edges for layering
-			incoming[e.From]++
+		levels[n.Y] = append(levels[n.Y], n)
+		if n.Y > maxY {
+			maxY = n.Y
 		}
 	}
 
-	var early, late []string
-	for _, n := range s.Nodes {
-		if incoming[n] == 0 {
-			early = append(early, n)
-		} else {
-			late = append(late, n)
-		}
-	}
+	// Vertical positioning
+	yStep := (rect.Max.Y - rect.Min.Y - 80) / (maxY + 1)
+	yOffset := rect.Min.Y + 80
 
-	// Fallbacks: if graph is fully cyclic or fully independent,
-	// put everything in the upper row.
-	if len(early) == 0 {
-		early = s.Nodes
-		late = nil
-	}
-
-	positions := map[string]image.Point{}
-
-	// Position early nodes
-	if len(early) == 1 {
-		positions[early[0]] = image.Point{(left + right) / 2, topY}
-	} else if len(early) > 1 {
-		for i, name := range early {
-			x := left + (right-left)*i/(len(early)-1)
-			positions[name] = image.Point{x, topY}
-		}
-	}
-
-	// Position late nodes
-	if len(late) == 1 {
-		positions[late[0]] = image.Point{(left + right) / 2, botY}
-	} else if len(late) > 1 {
-		for i, name := range late {
-			x := left + (right-left)*i/(len(late)-1)
-			positions[name] = image.Point{x, botY}
-		}
-	}
-
-	// Fallback for any missing position
-	for _, name := range s.Nodes {
-		if _, ok := positions[name]; !ok {
-			positions[name] = image.Point{(left + right) / 2, (topY + botY) / 2}
+	positions := make(map[string]image.Point)
+	for yLevel, nodes := range levels {
+		xStep := (rect.Max.X - rect.Min.X - 80) / len(nodes)
+		xOffset := rect.Min.X + 40 + xStep/2
+		for i, n := range nodes {
+			positions[n.Name] = image.Point{
+				X: xOffset + i*xStep,
+				Y: yOffset + yLevel*yStep,
+			}
 		}
 	}
 
 	// Draw edges first
+	nodesByName := make(map[string]Node)
+	for _, n := range s.Nodes {
+		nodesByName[n.Name] = n
+	}
 	for _, e := range s.Edges {
 		from := positions[e.From]
 		to := positions[e.To]
+		fromNode := nodesByName[e.From]
+		toNode := nodesByName[e.To]
 		if e.Bidirectional {
-			drawBidirectionalArrow(img, from.X, from.Y, to.X, to.Y, color.RGBA{0, 0, 0, 255})
+			drawBidirectionalArrow(img, from.X, from.Y, to.X, to.Y, color.RGBA{0, 0, 0, 255}, fromNode.IsProcess, toNode.IsProcess)
 		} else {
-			// Single arrow for unidirectional influence
-			drawArrow(img, from.X, from.Y, to.X, to.Y, color.RGBA{0, 0, 0, 255})
+			drawArrow(img, from.X, from.Y, to.X, to.Y, color.RGBA{0, 0, 0, 255}, fromNode.IsProcess, toNode.IsProcess)
 		}
 	}
 
 	// Draw nodes on top
 	nodeFill := color.RGBA{220, 235, 250, 255}
 	nodeBorder := color.RGBA{20, 40, 120, 255}
-	for _, name := range s.Nodes {
-		pt := positions[name]
-		drawNode(img, pt.X, pt.Y, 20, nodeFill, nodeBorder)
-		drawLabel(img, name, pt.X-5, pt.Y+5, color.RGBA{0, 0, 0, 255})
+	for _, n := range s.Nodes {
+		pt := positions[n.Name]
+		if n.IsProcess {
+			drawProcess(img, pt.X, pt.Y, 40, 20, nodeFill, nodeBorder)
+		} else {
+			drawNode(img, pt.X, pt.Y, 20, nodeFill, nodeBorder)
+		}
+		drawLabel(img, n.Name, pt.X-5, pt.Y+5, color.RGBA{0, 0, 0, 255})
 	}
+}
+
+func drawProcess(img *image.RGBA, cx, cy, w, h int, fill, border color.Color) {
+	rect := image.Rect(cx-w/2, cy-h/2, cx+w/2, cy+h/2)
+	fillRect(img, rect, fill)
+	drawRectBorder(img, rect, border)
 }
 
 // ----------------------------------------------------------------------
 // Drawing helpers
 // ----------------------------------------------------------------------
+
+func intersectionPoint(x, y, otherX, otherY int, isProcess bool) image.Point {
+	if !isProcess {
+		const nodeRadius = 20.0
+		dx := float64(otherX - x)
+		dy := float64(otherY - y)
+		dist := math.Hypot(dx, dy)
+		if dist == 0 {
+			return image.Point{x, y}
+		}
+		return image.Point{
+			X: x + int(dx/dist*nodeRadius),
+			Y: y + int(dy/dist*nodeRadius),
+		}
+	}
+
+	const (
+		w = 40
+		h = 20
+	)
+	dx := float64(otherX - x)
+	dy := float64(otherY - y)
+
+	// Check intersection with vertical edges
+	if dx != 0 {
+		t := float64(w/2) / math.Abs(dx)
+		candY := float64(y) + t*dy
+		if candY >= float64(y-h/2) && candY <= float64(y+h/2) {
+			return image.Point{x + int(math.Copysign(float64(w/2), dx)), int(candY)}
+		}
+	}
+
+	// Check intersection with horizontal edges
+	if dy != 0 {
+		t := float64(h/2) / math.Abs(dy)
+		candX := float64(x) + t*dx
+		if candX >= float64(x-w/2) && candX <= float64(x+w/2) {
+			return image.Point{int(candX), y + int(math.Copysign(float64(h/2), dy))}
+		}
+	}
+
+	return image.Point{x, y}
+}
 
 func fillRect(img *image.RGBA, r image.Rectangle, c color.Color) {
 	draw.Draw(img, r, &image.Uniform{c}, image.Point{}, draw.Src)
@@ -533,9 +570,7 @@ func drawNode(img *image.RGBA, cx, cy, r int, fill, border color.Color) {
 	}
 }
 
-func drawArrow(img *image.RGBA, x0, y0, x1, y1 int, col color.Color) {
-	const nodeRadius = 20.0
-
+func drawArrow(img *image.RGBA, x0, y0, x1, y1 int, col color.Color, fromProcess, toProcess bool) {
 	dx := float64(x1 - x0)
 	dy := float64(y1 - y0)
 	dist := math.Hypot(dx, dy)
@@ -547,20 +582,18 @@ func drawArrow(img *image.RGBA, x0, y0, x1, y1 int, col color.Color) {
 	uy := dy / dist
 
 	// shorten line so it meets node edges
-	tailX := float64(x0) + ux*nodeRadius
-	tailY := float64(y0) + uy*nodeRadius
-	headX := float64(x1) - ux*nodeRadius
-	headY := float64(y1) - uy*nodeRadius
+	tail := intersectionPoint(x0, y0, x1, y1, fromProcess)
+	head := intersectionPoint(x1, y1, x0, y0, toProcess)
 
-	drawLine(img, int(tailX), int(tailY), int(headX), int(headY), col)
+	drawLine(img, tail.X, tail.Y, head.X, head.Y, col)
 
 	// arrowhead
 	arrowLen := 10.0
 	perpX := -uy
 	perpY := ux
 
-	hx := headX
-	hy := headY
+	hx := float64(head.X)
+	hy := float64(head.Y)
 
 	p2x := hx - ux*arrowLen + perpX*(arrowLen/2)
 	p2y := hy - uy*arrowLen + perpY*(arrowLen/2)
@@ -575,9 +608,7 @@ func drawArrow(img *image.RGBA, x0, y0, x1, y1 int, col color.Color) {
 	)
 }
 
-func drawBidirectionalArrow(img *image.RGBA, x0, y0, x1, y1 int, col color.Color) {
-	const nodeRadius = 20.0
-
+func drawBidirectionalArrow(img *image.RGBA, x0, y0, x1, y1 int, col color.Color, fromProcess, toProcess bool) {
 	dx := float64(x1 - x0)
 	dy := float64(y1 - y0)
 	dist := math.Hypot(dx, dy)
@@ -589,12 +620,10 @@ func drawBidirectionalArrow(img *image.RGBA, x0, y0, x1, y1 int, col color.Color
 	uy := dy / dist
 
 	// shorten line so it meets node edges
-	tailX := float64(x0) + ux*nodeRadius
-	tailY := float64(y0) + uy*nodeRadius
-	headX := float64(x1) - ux*nodeRadius
-	headY := float64(y1) - uy*nodeRadius
+	tail := intersectionPoint(x0, y0, x1, y1, fromProcess)
+	head := intersectionPoint(x1, y1, x0, y0, toProcess)
 
-	drawLine(img, int(tailX), int(tailY), int(headX), int(headY), col)
+	drawLine(img, tail.X, tail.Y, head.X, head.Y, col)
 
 	// arrowhead setup
 	arrowLen := 10.0
@@ -602,8 +631,8 @@ func drawBidirectionalArrow(img *image.RGBA, x0, y0, x1, y1 int, col color.Color
 	perpY := ux
 
 	// arrowhead at (x1, y1) end
-	hx1 := headX
-	hy1 := headY
+	hx1 := float64(head.X)
+	hy1 := float64(head.Y)
 	p2x1 := hx1 - ux*arrowLen + perpX*(arrowLen/2)
 	p2y1 := hy1 - uy*arrowLen + perpY*(arrowLen/2)
 	p3x1 := hx1 - ux*arrowLen - perpX*(arrowLen/2)
@@ -611,8 +640,8 @@ func drawBidirectionalArrow(img *image.RGBA, x0, y0, x1, y1 int, col color.Color
 	fillTriangle(img, int(hx1), int(hy1), int(p2x1), int(p2y1), int(p3x1), int(p3y1), col)
 
 	// arrowhead at (x0, y0) end
-	hx2 := tailX
-	hy2 := tailY
+	hx2 := float64(tail.X)
+	hy2 := float64(tail.Y)
 	p2x2 := hx2 + ux*arrowLen + perpX*(arrowLen/2)
 	p2y2 := hy2 + uy*arrowLen + perpY*(arrowLen/2)
 	p3x2 := hx2 + ux*arrowLen - perpX*(arrowLen/2)
