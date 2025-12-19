@@ -1,10 +1,9 @@
 // interactions: generate a grid of all basic interaction patterns
 // between A and B, with external influences from C and D.
 // Project home: https://github.com/arran4/interactions
-package main
+package interactions
 
 import (
-	"flag"
 	"fmt"
 	"image"
 	"image/color"
@@ -32,79 +31,39 @@ type Scenario struct {
 	Edges    []Edge
 }
 
-func main() {
-	if err := run(os.Args[1:]); err != nil {
-		log.Fatal(err)
+// Render is a subcommand `interactions render`
+// Generate the interactions grid PNG (use --output to set the destination)
+//
+// output: path to write the generated PNG
+// columns: number of columns in the grid (use 3 for README-friendly long form)
+func Render(output string, columns int) {
+	if output == "" {
+		output = "interactions.png"
 	}
-}
-
-func run(args []string) error {
-	if len(args) == 0 {
-		printGlobalUsage()
-		return nil
+	if columns == 0 {
+		columns = 8
 	}
-
-	switch args[0] {
-	case "render":
-		return runRender(args[1:])
-	case "list":
-		return runList(args[1:])
-	case "help", "--help", "-h":
-		printGlobalUsage()
-		return nil
-	default:
-		printGlobalUsage()
-		return fmt.Errorf("unknown subcommand %q", args[0])
-	}
-}
-
-func runRender(args []string) error {
-	fs := flag.NewFlagSet("render", flag.ContinueOnError)
-	output := fs.String("output", "interactions.png", "path to write the generated PNG")
-	columns := fs.Int("columns", 8, "number of columns in the grid (use 3 for README-friendly long form)")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	if *columns < 1 {
-		return fmt.Errorf("columns must be at least 1")
+	if columns < 1 {
+		log.Fatal("columns must be at least 1")
 	}
 
 	scenarios := generateScenarios()
-	renderAllScenarios(*output, scenarios, *columns)
-	return nil
+	renderAllScenarios(output, scenarios, columns)
 }
 
-func runList(args []string) error {
-	fs := flag.NewFlagSet("list", flag.ContinueOnError)
-	longForm := fs.Bool("long", false, "print subtitles along with scenario titles")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
+// List is a subcommand `interactions list`
+// List scenario titles (use --long to include subtitles)
+//
+// long: print subtitles along with scenario titles
+func List(long bool) {
 	scenarios := generateScenarios()
 	for i, s := range scenarios {
-		if *longForm {
+		if long {
 			fmt.Printf("%02d. %s — %s\n", i+1, s.Title, s.Subtitle)
 			continue
 		}
 		fmt.Printf("%02d. %s\n", i+1, s.Title)
 	}
-	return nil
-}
-
-func printGlobalUsage() {
-	fmt.Println("Usage: interactions <command> [options]")
-	fmt.Println()
-	fmt.Println("Commands:")
-	fmt.Println("  render   Generate the interactions grid PNG (use --output to set the destination)")
-	fmt.Println("  list     List scenario titles (use --long to include subtitles)")
-	fmt.Println("  help     Show this help text")
-	fmt.Println()
-	fmt.Println("Examples:")
-	fmt.Println("  go run main.go render --output interactions.png")
-	fmt.Println("  go run main.go render --columns 3 --output interactions-long.png")
-	fmt.Println("  go run main.go list --long")
 }
 
 // ----------------------------------------------------------------------

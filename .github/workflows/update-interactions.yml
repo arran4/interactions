@@ -23,8 +23,8 @@ jobs:
 
       - name: Generate interaction images
         run: |
-          go run main.go render --output interactions.png
-          go run main.go render --columns 3 --output interactions-long.png
+          go run ./cmd/interactions render --output interactions.png
+          go run ./cmd/interactions render --columns 3 --output interactions-long.png
 
       - name: Create or update pull request
         uses: peter-evans/create-pull-request@v6
