@@ -25,7 +25,7 @@ The long-form view above uses three columns so it remains readable within the Gi
 
 ## Command-line usage
 
-The generator now offers subcommands so you can choose how you want to work with the scenarios. Run `go run main.go help` for a concise overview, or use the following cheatsheet:
+The generator now offers subcommands so you can choose how you want to work with the scenarios. Run `go run ./cmd/interactions` for a concise overview, or use the following cheatsheet:
 
 * `render` — Create the visualization PNG. Use `--output` to set a custom destination (defaults to `interactions.png`). Add `--columns 3` when you need a long-form layout that reads well in narrow views like the GitHub README.
 * `list` — Print the scenario titles to the console. Add `--long` to include subtitles for a quick narrative reference.
@@ -35,19 +35,19 @@ The generator now offers subcommands so you can choose how you want to work with
 Render the grid to a specific location:
 
 ```
-go run main.go render --output build/interaction-grid.png
+go run ./cmd/interactions render --output build/interaction-grid.png
 ```
 
 Create a long-form version that fits narrower documentation columns (3 panels wide):
 
 ```
-go run main.go render --columns 3 --output build/interaction-grid-long.png
+go run ./cmd/interactions render --columns 3 --output build/interaction-grid-long.png
 ```
 
 Browse the scenarios directly in your terminal with subtitles for README or documentation work:
 
 ```
-go run main.go list --long
+go run ./cmd/interactions list --long
 ```
 
 ## License

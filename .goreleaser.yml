@@ -3,7 +3,7 @@ builds:
   -
     id: "interactions"
     binary: "interactions"
-    main: main.go
+    main: ./cmd/interactions
     env:
       - CGO_ENABLED=0
     goos:
