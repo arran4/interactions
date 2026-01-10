@@ -1,5 +1,14 @@
-Usage: interactions render <subcommand> [arguments]
+Usage: interactions render [flags...]
+
+Generate the interactions grid PNG (use --output to set the destination)
+
+output: path to write the generated PNG
+columns: number of columns in the grid (use 3 for README-friendly long form)
 
 Subcommands:
+    help         Print this help message
+    usage        Print this usage message
 
-    version      Print version information
+Flags:
+    --output string
+    --columns int

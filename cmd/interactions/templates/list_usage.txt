@@ -1,5 +1,12 @@
-Usage: interactions list <subcommand> [arguments]
+Usage: interactions list [flags...]
+
+List scenario titles (use --long to include subtitles)
+
+long: print subtitles along with scenario titles
 
 Subcommands:
+    help         Print this help message
+    usage        Print this usage message
 
-    version      Print version information
+Flags:
+    --long
