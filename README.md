@@ -52,6 +52,6 @@ go run ./cmd/interactions list --long
 
 ## License
 
-This project is in the public domain. We waive copyright and related rights in the work worldwide through the CC0 1.0 Universal public domain dedication.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-You can copy, modify, distribute and perform the work, even for commercial purposes, all without asking permission.
+The generated images and documentation are licensed under the [Creative Commons Attribution 4.0 International License](http://creativecommons.org/licenses/by/4.0/).
