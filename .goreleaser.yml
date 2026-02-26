@@ -38,7 +38,7 @@ nfpms:
     homepage: https://github.com/arran4/
     maintainer: Arran Ubels <arran@ubels.com.au>
     description: "Generates a comprehensive visualization of interaction patterns to demonstrate how quickly complexity can arise in a system."
-    license: Private
+    license: MIT
     formats:
       - apk
       - deb
